@@ -1,5 +1,3 @@
-# main.py
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, BackgroundTasks, UploadFile, File, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from typing import List
