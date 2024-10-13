@@ -1,2 +1,5 @@
 v/
 .idea/
+.env*
+__pycache__/
+app/.env
