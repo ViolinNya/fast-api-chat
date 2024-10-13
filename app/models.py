@@ -52,3 +52,15 @@ class ChatParticipant(Base):
     user_id = Column(Integer, nullable=False)
 
     chat = relationship("Chat", back_populates="participants")
+
+
+class UploadedFile(Base):
+    __tablename__ = 'uploaded_files'
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String, nullable=False)
+    file_url = Column(String, nullable=False)
+    uploader_id = Column(Integer, ForeignKey('users.id'))
+    uploaded_at = Column(DateTime, default=datetime.utcnow())
+
+    uploader = relationship("User", back_populates="uploaded_files")

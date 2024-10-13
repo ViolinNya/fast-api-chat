@@ -1,27 +1,48 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, BackgroundTasks, UploadFile, File, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, UploadFile, File, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer
 from typing import List
-from models import Base, Message, MessageStatus, ContentType, Chat, ChatParticipant
+from models import Base, Message, MessageStatus, ContentType, Chat, ChatParticipant, UploadedFile
 from database import SessionLocal, engine
 from auth import get_current_user
 from utils.connection_manager import ConnectionManager
 from datetime import datetime
 import json
 import asyncio
+import uuid
+from dotenv import load_dotenv
+import os
 
+
+
+load_dotenv()
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
 
 manager = ConnectionManager()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token") # при необходимости изменить
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), user_id: int = Depends(get_current_user)):
-    file_location = f"media/{file.filename}"
+    unique_filename = f"{uuid.uuid4()}_{file.filename}"
+    file_location = f"media/{unique_filename}"
     with open(file_location, "wb+") as f:
         f.write(await file.read())
+
+    db = SessionLocal()
+    try:
+        uploaded_file = UploadedFile(
+            filename=file.filename,
+            file_url=file_location,
+            uploader_id=user_id
+        )
+        db.add(uploaded_file)
+        db.commit()
+        db.refresh(uploaded_file)
+    finally:
+        db.close()
+
     return {"file_url": file_location}
 
 @app.get("/messages/{user_id}")
@@ -33,6 +54,15 @@ async def get_messages_with_user(user_id: int, current_user_id: int = Depends(ge
             ((Message.sender_id == user_id) & (Message.receiver_id == current_user_id))
         ).order_by(Message.timestamp.asc()).all()
         return messages
+    finally:
+        db.close()
+
+@app.get("/files/")
+async def get_user_files(user_id: int = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        files = db.query(UploadedFile).filter(UploadedFile.uploader_id == user_id).all()
+        return files
     finally:
         db.close()
 
@@ -189,4 +219,4 @@ async def resend_message_if_no_ack(message_id: int, attempts: int = 3, delay: in
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8003)
+    uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")))
