@@ -9,12 +9,7 @@ from datetime import datetime
 import json
 import asyncio
 import uuid
-from dotenv import load_dotenv
-import os
 
-
-
-load_dotenv()
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
@@ -57,14 +52,6 @@ async def get_messages_with_user(user_id: int, current_user_id: int = Depends(ge
     finally:
         db.close()
 
-@app.get("/files/")
-async def get_user_files(user_id: int = Depends(get_current_user)):
-    db = SessionLocal()
-    try:
-        files = db.query(UploadedFile).filter(UploadedFile.uploader_id == user_id).all()
-        return files
-    finally:
-        db.close()
 
 @app.post("/chats/")
 async def create_chat(participants: List[int], name: str = None, current_user_id: int = Depends(get_current_user)):
@@ -216,7 +203,3 @@ async def resend_message_if_no_ack(message_id: int, attempts: int = 3, delay: in
                 break
     finally:
         db.close()
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")))
