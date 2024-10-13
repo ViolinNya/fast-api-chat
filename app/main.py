@@ -9,12 +9,7 @@ from datetime import datetime
 import json
 import asyncio
 import uuid
-from dotenv import load_dotenv
-import os
 
-
-
-load_dotenv()
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
@@ -216,7 +211,3 @@ async def resend_message_if_no_ack(message_id: int, attempts: int = 3, delay: in
                 break
     finally:
         db.close()
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")))
