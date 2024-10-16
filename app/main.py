@@ -137,27 +137,70 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Depends(oauth2_s
             message.status = MessageStatus.DELIVERED
             db.commit()
 
+        participant_chats = db.query(ChatParticipant.chat_id).filter(
+            ChatParticipant.user_id == user_id
+        ).subquery()
+
+        undelivered_group_messages = db.query(Message).filter(
+            Message.chat_id.in_(participant_chats),
+            Message.status == MessageStatus.SENT,
+            Message.sender_id != user_id
+        ).all()
+        for message in undelivered_group_messages:
+            await websocket.send_text(json.dumps({
+                "action": "new_message",
+                "message_id": message.id,
+                "chat_id": message.chat_id,
+                "sender_id": message.sender_id,
+                "content": message.content,
+                "content_type": message.content_type.value,
+                "timestamp": str(message.timestamp),
+                "file_url": message.file_url
+            }))
+            message.status = MessageStatus.DELIVERED
+            db.commit()
+
         while True:
             data = await websocket.receive_json()
             action = data.get("action")
             if action == "send_message":
+                receiver_id = data.get("receiver_id")
                 chat_id = data.get("chat_id")
                 content = data.get("content")
                 content_type = data.get("content_type")
                 file_url = data.get("file_url")
 
-                new_message = Message(
-                    sender_id=user_id,
-                    chat_id=chat_id,
-                    content=content,
-                    content_type=ContentType(content_type),
-                    timestamp=datetime.utcnow(),
-                    file_url=file_url
-                )
-                db.add(new_message)
-                db.commit()
+                if receiver_id:
+                    new_message = Message(
+                        sender_id=user_id,
+                        receiver_id=receiver_id,
+                        content=content,
+                        content_type=ContentType(content_type),
+                        timestamp=datetime.utcnow(),
+                        file_url=file_url
+                    )
+                    db.add(new_message)
+                    db.commit()
 
-                await send_message_to_chat(new_message, db)
+                    await send_message_to_user(new_message, db)
+                elif chat_id:
+                    new_message = Message(
+                        sender_id=user_id,
+                        chat_id=chat_id,
+                        content=content,
+                        content_type=ContentType(content_type),
+                        timestamp=datetime.utcnow(),
+                        file_url=file_url
+                    )
+                    db.add(new_message)
+                    db.commit()
+
+                    await send_message_to_chat(new_message, db)
+                else:
+                    await websocket.send_text(json.dumps({
+                        "error": "receiver_id or chat_id must be provided"
+                    }))
+
             elif action == "acknowledge":
                 message_id = data.get("message_id")
                 message = db.query(Message).filter(Message.id == message_id).first()
@@ -178,6 +221,7 @@ async def send_message_to_user(message: Message, db):
     message_data = {
         "message_id": message.id,
         "sender_id": message.sender_id,
+        "receiver_id": message.receiver_id,
         "content": message.content,
         "content_type": message.content_type.value,
         "timestamp": str(message.timestamp),
@@ -191,6 +235,7 @@ async def send_message_to_user(message: Message, db):
 
     asyncio.create_task(resend_message_if_no_ack(message.id))
 
+
 async def resend_message_if_no_ack(message_id: int, attempts: int = 3, delay: int = 10):
     db = SessionLocal()
     try:
@@ -198,7 +243,10 @@ async def resend_message_if_no_ack(message_id: int, attempts: int = 3, delay: in
             await asyncio.sleep(delay)
             message = db.query(Message).filter(Message.id == message_id).first()
             if message and message.status != MessageStatus.READ:
-                await send_message_to_user(message, db)
+                if message.receiver_id:
+                    await send_message_to_user(message, db)
+                elif message.chat_id:
+                    await send_message_to_chat(message, db)
             else:
                 break
     finally:

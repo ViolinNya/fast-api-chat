@@ -22,13 +22,14 @@ class Message(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, nullable=False)
-    receiver_id = Column(Integer, nullable=False)
+    receiver_id = Column(Integer, nullable=True)
+    chat_id = Column(Integer, ForeignKey('chats.id'), nullable=True)
     content = Column(String, nullable=True)
     content_type = Column(Enum(ContentType), nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
     status = Column(Enum(MessageStatus), default=MessageStatus.SENT)
     file_url = Column(String, nullable=True)
-    chat_id = Column(Integer, ForeignKey('chats.id'))
+
     chat = relationship("Chat", back_populates="messages")
 
 
