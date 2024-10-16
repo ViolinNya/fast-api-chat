@@ -17,6 +17,17 @@ class MessageStatus(enum.Enum):
     DELIVERED = "delivered"
     READ = "read"
 
+
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False, unique=True)
+    hashed_password = Column(String, nullable=False)
+
+    uploaded_files = relationship("UploadedFile", back_populates="uploader")
+
+
 class Message(Base):
     __tablename__ = 'messages'
 
